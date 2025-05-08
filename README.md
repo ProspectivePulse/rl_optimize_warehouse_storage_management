@@ -2,7 +2,7 @@
 
 1. **Project Overview:** 
 	- This project implements a Deep Q-Network (DQN) to solve a simulated warehouse environment using PyTorch and TensorBoard for training visualization.
-	- The objective of the algorithm is to optimize the usage of storage shelf space in the simulated warehouse environment.
+	- The objective of the algorithm is to optimize the usage of storage space in the simulated warehouse environment.
 	  
 
 2. **Features:**
