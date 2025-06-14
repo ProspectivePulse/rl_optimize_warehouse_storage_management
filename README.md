@@ -7,7 +7,7 @@
 
 2. **Features:**
 	
-	- TensorBoard logging (reward mean, episode length mean, exploration rate, frames per second)
+	- TensorBoard logging (episode length mean, reward mean, exploration rate, frames per second)
 	- Model saving/loading for inference 
 
 3. **Model Performance Graphs (TensorBoard):**
