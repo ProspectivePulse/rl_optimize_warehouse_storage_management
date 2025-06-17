@@ -38,6 +38,18 @@ clean:
 lint:
 	flake8 src
 
+## Train the agent
+train:
+	$(PYTHON_INTERPRETER) src/warehouse/train.py --config=config/config.yaml
+
+## Evaluate the trained agent
+evaluate:
+	$(PYTHON_INTERPRETER) src/warehouse/evaluate.py --config=config/config.yaml
+
+## Run the agent interactively (e.g. render environment)
+run:
+	$(PYTHON_INTERPRETER) src/warehouse/agent.py --render
+
 ## Upload Data to S3
 sync_data_to_s3:
 ifeq (default,$(PROFILE))
