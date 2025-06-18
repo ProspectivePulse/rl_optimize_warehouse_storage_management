@@ -33,11 +33,7 @@
    	- Setup Experience replay
    	- Exploration Strategy to be confirmed
    	- Create/Upload the following files:
-   	   - requirements.txt
-   	   - config.yaml
-   	   - agent.py
-   	   - train.py
-   	   - evaluate.py
+   	   - config.yaml   	   
    	   - utils.py
    	   - dqn_model.pt
    	   - any other relevant .ipynb files
