@@ -32,9 +32,7 @@
 
    	- Setup Experience replay
    	- Exploration Strategy to be confirmed
-   	- Create/Upload the following files:
-   	   - config.yaml   	   
-   	   - utils.py
+   	- Create/Upload the following files:   	   	      	   
    	   - dqn_model.pt
    	   - any other relevant .ipynb files
 	- Upload TensorBoard logs
