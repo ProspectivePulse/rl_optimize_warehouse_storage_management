@@ -1,0 +1,24 @@
+env:
+  grid_size: 5
+  num_items: 5
+  max_steps: 50
+
+agent:
+  learning_rate: 0.001
+  gamma: 0.99
+  epsilon_start: 0.5
+  epsilon_end: 0.01
+  epsilon_decay: 0.995
+  buffer_size: 10000
+  batch_size: 64
+
+train:
+  total_episodes: 500
+  max_timesteps: 50
+  target_update_freq: 10
+  save_path: models/trained_agent
+
+evaluate:
+  model_path: models/trained_agent.pth
+  num_episodes: 10
+  render: false
