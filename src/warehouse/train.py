@@ -1,54 +1,92 @@
+# src/warehouse/train.py
+
 import os
-import gymnasium as gym
-from stable_baselines3.common.vec_env import DummyVecEnv
+from gymnasium.wrappers import FlattenObservation
 from stable_baselines3.common.monitor import Monitor
+from stable_baselines3.common.vec_env import DummyVecEnv
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 
-from warehouse.env import WarehouseEnv
-from warehouse.agent import create_agent
-from warehouse.utils import load_config
+# Use relative imports for files within the same package
+from .utils import load_config, SaveAnimationCallback, create_training_gif
+from .env import WarehouseEnv
+from .agent import create_dqn_model
 
-
-def train_agent():
-    # Load config.yaml from root directory
-    config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "config.yaml")
-    config = load_config(config_path)
-
-    # Extract configuration sections
-    env_config = config["env"]
-    agent_config = config["agent"]
-    train_config = config["train"]
-
-    # Create monitored training and evaluation environments
-    env = DummyVecEnv([lambda: Monitor(WarehouseEnv(**env_config))])
-    eval_env = DummyVecEnv([lambda: WarehouseEnv(**env_config)])
-
-    # Create the agent with config
-    model = create_agent(env, agent_config)
-
-    # Setup callbacks
-    checkpoint_callback = CheckpointCallback(
-        save_freq=5000,
-        save_path=train_config["save_path"],
-        name_prefix="warehouse_dqn"
+def train():
+    """Main training function."""
+    # --- 1. Load Configuration ---
+    config = load_config()
+    paths = config['paths']
+    training_params = config['training']
+    env_params = config['env_params']
+    animation_params = config['animation']
+    
+    # --- 2. Create and Wrap the Environment ---
+    print("Creating training environment...")
+    env = WarehouseEnv(
+        grid_size=env_params['grid_size'],
+        num_items=env_params['num_items'],
+        max_steps=env_params['max_steps'],
+        render_mode="rgb_array"
     )
+    env = FlattenObservation(env)
+    env = Monitor(env)
+    env = DummyVecEnv([lambda: env])
+
+    # --- 3. Set up Callbacks ---
+    print("Setting up callbacks...")
+    eval_freq = training_params['eval_freq']
+    
+    # Evaluation environment setup
+    eval_env = WarehouseEnv(
+        grid_size=env_params['grid_size'],
+        num_items=env_params['num_items'],
+        max_steps=env_params['max_steps']
+    )
+    eval_env = FlattenObservation(eval_env)
+    eval_env = Monitor(eval_env)
+    eval_env = DummyVecEnv([lambda: eval_env])
+
+    # Create paths for models if they don't exist
+    os.makedirs(paths['models_dir'], exist_ok=True)
+    best_model_path = os.path.join(paths['models_dir'], paths['best_model_name'])
 
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=os.path.join(train_config["save_path"], "best"),
-        log_path="logs/dqn_eval/",
-        eval_freq=5000,
+        best_model_save_path=paths['models_dir'],
+        log_path=paths['logs_dir'],
+        eval_freq=eval_freq,
         deterministic=True,
+        render=False,
+        n_eval_episodes=5
     )
 
-    # Train model
-    total_timesteps = train_config["total_episodes"] * train_config["max_timesteps"]
-    model.learn(total_timesteps=total_timesteps, callback=[checkpoint_callback, eval_callback])
+    animation_callback = SaveAnimationCallback(
+        save_freq=animation_params['save_freq'],
+        animation_dir=paths['animation_frames_dir']
+    )
+    
+    callbacks = [eval_callback, animation_callback]
 
-    # Save final model
-    model.save(os.path.join(train_config["save_path"], "dqn_warehouse_final"))
-    print("Training complete. Model saved.")
+    # --- 4. Create and Train the Agent ---
+    print("Creating DQN agent...")
+    model = create_dqn_model(env, config)
 
+    print(f"Starting training for {training_params['total_timesteps']} timesteps...")
+    model.learn(
+        total_timesteps=training_params['total_timesteps'],
+        callback=callbacks,
+        log_interval=training_params['log_interval']
+    )
+    
+    # --- 5. Save Final Model and Create Training GIF ---
+    final_model_path = os.path.join(paths['models_dir'], paths['final_model_name'])
+    model.save(final_model_path)
+    print(f"Training complete. Final model saved to {final_model_path}")
 
-if __name__ == "__main__":
-    train_agent()
+    create_training_gif(
+        frames_dir=paths['animation_frames_dir'],
+        output_path=paths['training_gif']
+    )
+
+if __name__ == '__main__':
+    train()

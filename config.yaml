@@ -1,24 +1,41 @@
-env:
+# Configuration for the Warehouse RL Project
+
+# -- Environment Settings --
+env_params:
   grid_size: 5
   num_items: 5
-  max_steps: 50
+  max_steps: 200 # Max steps per episode during training/evaluation
 
-agent:
-  learning_rate: 0.001
+# -- Training Settings --
+training:
+  total_timesteps: 100000
+  log_interval: 10 # How often to print training stats to the console
+  eval_freq: 10000 # How often to evaluate the model and save the best one
+
+# -- Model Hyperparameters (DQN) --
+model_params:
+  policy: 'MlpPolicy'
+  learning_rate: 0.0005  # 5e-4
+  buffer_size: 50000
+  learning_starts: 5000
+  batch_size: 128
   gamma: 0.99
-  epsilon_start: 0.5
-  epsilon_end: 0.01
-  epsilon_decay: 0.995
-  buffer_size: 10000
-  batch_size: 64
+  train_freq: 4 # Corresponds to (4, "step")
+  target_update_interval: 2500
+  exploration_fraction: 0.2
+  exploration_final_eps: 0.02
+  verbose: 1
 
-train:
-  total_episodes: 500
-  max_timesteps: 50
-  target_update_freq: 10
-  save_path: models/trained_agent
+# -- Paths --
+paths:
+  models_dir: "models"
+  best_model_name: "best_model.zip"
+  final_model_name: "final_model.zip"
+  logs_dir: "logs"
+  animation_frames_dir: "animation_frames"
+  evaluation_gif: "warehouse_evaluation.gif"
+  training_gif: "warehouse_training.gif"
 
-evaluate:
-  model_path: models/trained_agent.pth
-  num_episodes: 10
-  render: false
+# -- Animation/Callback Settings --
+animation:
+  save_freq: 5000 # Save a frame for the training animation every N steps

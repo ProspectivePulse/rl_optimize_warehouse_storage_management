@@ -18,3 +18,5 @@ gymnasium
 tensorboard
 matplotlib
 seaborn
+imageio
+pyyaml

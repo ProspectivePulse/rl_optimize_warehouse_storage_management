@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RL Agent Animation Viewer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        #viewer {
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            text-align: center;
+            margin: 20px;
+            width: 550px;
+        }
+        #frameContainer {
+            width: 500px;
+            height: 500px;
+            border: 1px solid #ddd;
+            margin: 20px auto 15px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background-color: #fdfdfd;
+        }
+        #frameImage {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        #errorMessage {
+            color: #d9534f;
+            font-weight: bold;
+            display: none; /* Hidden by default */
+            padding: 20px;
+            white-space: pre-wrap; /* Allows line breaks */
+        }
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        #frameInfo {
+            margin-top: 15px;
+            font-size: 16px;
+            color: #333;
+            font-family: 'Courier New', Courier, monospace;
+            min-height: 20px;
+        }
+        /* --- CUSTOM DROPDOWN STYLES --- */
+        .custom-select-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .custom-select-wrapper {
+            position: relative;
+            width: 400px;
+            user-select: none;
+        }
+        .custom-select-trigger {
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            background: #fff;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .custom-select-trigger::after {
+            content: '▼';
+            font-size: 12px;
+        }
+        .custom-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            border: 1px solid #ccc;
+            border-top: 0;
+            background: #fff;
+            z-index: 2;
+            display: none; /* Hidden by default */
+        }
+        .custom-options.open {
+            display: block;
+        }
+        .custom-option {
+            padding: 10px;
+            cursor: pointer;
+        }
+        .custom-option:hover {
+            background-color: #f0f2f5;
+        }
+    </style>
+</head>
+<body>
+
+<div id="viewer">
+    <h1>Warehouse Agent Animation</h1>
+    
+    <div class="custom-select-container">
+        <label>Select Animation:</label>
+        <div class="custom-select-wrapper">
+            <div class="custom-select-trigger">
+                <span>Evaluation Run (from ./evaluation_frames/)</span>
+            </div>
+            <div class="custom-options">
+                <div class="custom-option" data-value="evaluation_frames">Evaluation Run (from ./evaluation_frames/)</div>
+                <div class="custom-option" data-value="animation_frames">Training Snapshots (from ./animation_frames/)</div>
+            </div>
+        </div>
+    </div>
+    <select id="folder" style="display: none;">
+        <option value="evaluation_frames">Evaluation</option>
+        <option value="animation_frames">Training</option>
+    </select>
+
+    <div id="frameContainer">
+        <img id="frameImage" src="" alt="Agent Frame">
+        <div id="errorMessage"></div>
+    </div>
+    <div id="frameInfo">Select an animation to begin.</div>
+    <div class="controls">
+        <button id="prevBtn">Previous</button>
+        <button id="playPauseBtn">Play</button>
+        <button id="nextBtn">Next</button>
+    </div>
+    <input type="range" id="slider" min="0" value="0" style="margin-top: 10px;">
+</div>
+
+<script>
+    // --- JAVASCRIPT FOR CUSTOM DROPDOWN ---
+    document.querySelector('.custom-select-wrapper').addEventListener('click', function() {
+        this.querySelector('.custom-options').classList.toggle('open');
+    });
+
+    for (const option of document.querySelectorAll('.custom-option')) {
+        option.addEventListener('click', function() {
+            if (!this.classList.contains('selected')) {
+                // Update hidden select
+                const hiddenSelect = document.getElementById('folder');
+                hiddenSelect.value = this.dataset.value;
+                
+                // Update visible trigger text
+                document.querySelector('.custom-select-trigger span').textContent = this.textContent;
+                
+                // Trigger the load function
+                loadFolder();
+            }
+        });
+    }
+
+    window.addEventListener('click', function(e) {
+        const select = document.querySelector('.custom-select-wrapper');
+        if (!select.contains(e.target)) {
+            select.querySelector('.custom-options').classList.remove('open');
+        }
+    });
+
+    // --- CORE LOGIC FOR LOADING AND DISPLAYING FRAMES ---
+    const frameImage = document.getElementById('frameImage');
+    const frameInfo = document.getElementById('frameInfo');
+    const errorMessage = document.getElementById('errorMessage');
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const slider = document.getElementById('slider');
+    const folderSelect = document.getElementById('folder');
+
+    let frameFiles = [];
+    let currentIndex = 0;
+    let isPlaying = false;
+    let playInterval;
+
+    // --- IMPORTANT: Adjust these values if you change your training/evaluation parameters ---
+    const EVAL_FRAME_COUNT = 200;
+    const TRAINING_SAVE_FREQ = 1000;
+    const TRAINING_TOTAL_TIMESTEPS = 25000;
+    // ------------------------------------------------------------------------------------
+
+    function generateFileNames(folder) {
+        let files = [];
+        if (folder === 'evaluation_frames') {
+            for (let i = 0; i < EVAL_FRAME_COUNT; i++) {
+                files.push(`eval_frame_${String(i).padStart(4, '0')}.png`);
+            }
+        } else if (folder === 'animation_frames') {
+            for (let i = TRAINING_SAVE_FREQ; i <= TRAINING_TOTAL_TIMESTEPS; i += TRAINING_SAVE_FREQ) {
+                files.push(`frame_${String(i).padStart(6, '0')}.png`);
+            }
+        }
+        return files;
+    }
+
+    function updateFrame() {
+        if (frameFiles.length === 0) return;
+        const folder = folderSelect.value;
+        const fileName = frameFiles[currentIndex];
+        frameImage.src = `${folder}/${fileName}`;
+        frameInfo.innerText = `Frame: ${currentIndex + 1} / ${frameFiles.length} (${fileName})`;
+        slider.value = currentIndex;
+    }
+
+    function loadFolder() {
+        stopPlayback();
+        currentIndex = 0;
+        errorMessage.style.display = 'none'; // Hide old errors
+        frameImage.style.display = 'block';   // Show image view
+
+        const folder = folderSelect.value;
+        frameFiles = generateFileNames(folder);
+        slider.max = frameFiles.length - 1 > 0 ? frameFiles.length - 1 : 0;
+        
+        if (frameFiles.length > 0) {
+            updateFrame();
+        } else {
+            frameInfo.innerText = "No frames to display.";
+        }
+    }
+
+    frameImage.onerror = function() {
+        frameImage.style.display = 'none'; // Hide the broken image icon
+        errorMessage.style.display = 'block'; // Show the error message
+        errorMessage.innerText = `Error: Cannot load image.\nIs the folder '${folderSelect.value}' empty or are the filenames incorrect?`;
+        frameInfo.innerText = "Check folder contents and script parameters.";
+    };
+    
+    // --- PLAYBACK AND CONTROL FUNCTIONS ---
+    function playPlayback() {
+        isPlaying = true; playPauseBtn.innerText = 'Pause';
+        playInterval = setInterval(() => {
+            if (currentIndex >= frameFiles.length - 1) { 
+                stopPlayback(); 
+            } else { 
+                currentIndex++; 
+                updateFrame(); 
+            }
+        }, 100); // 100ms delay = 10 FPS
+    }
+    function stopPlayback() { 
+        isPlaying = false; 
+        playPauseBtn.innerText = 'Play'; 
+        clearInterval(playInterval); 
+    }
+    prevBtn.addEventListener('click', () => { 
+        stopPlayback(); 
+        currentIndex = (currentIndex > 0) ? currentIndex - 1 : 0; 
+        updateFrame(); 
+    });
+    nextBtn.addEventListener('click', () => { 
+        stopPlayback(); 
+        currentIndex = (currentIndex < frameFiles.length - 1) ? currentIndex + 1 : frameFiles.length - 1; 
+        updateFrame(); 
+    });
+    playPauseBtn.addEventListener('click', () => { 
+        if (isPlaying) { stopPlayback(); } else { playPlayback(); } 
+    });
+    slider.addEventListener('input', (e) => { 
+        stopPlayback(); 
+        currentIndex = parseInt(e.target.value); 
+        updateFrame(); 
+    });
+
+    // --- INITIAL LOAD ---
+    window.onload = loadFolder;
+
+</script>
+
+</body>
+</html>

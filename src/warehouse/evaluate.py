@@ -1,38 +1,61 @@
+# src/warehouse/evaluate.py
+
+import os
+import imageio
+from gymnasium.wrappers import FlattenObservation
 from stable_baselines3 import DQN
-from stable_baselines3.common.vec_env import DummyVecEnv
-from warehouse.env import WarehouseEnv
-from warehouse.utils import load_config
 
+from .utils import load_config
+from .env import WarehouseEnv
 
-def evaluate_agent():
+def evaluate():
+    """Main evaluation function."""
+    # --- 1. Load Configuration and Model ---
     config = load_config()
+    paths = config['paths']
+    env_params = config['env_params']
 
-    model_path = config["train"]["save_path"] + ".zip"  # e.g. "models/trained_agent.zip"
-    episodes = config.get("evaluate", {}).get("num_episodes", 5)
-    render = config.get("evaluate", {}).get("render", False)
+    model_path = os.path.join(paths['models_dir'], paths['best_model_name']) # Evaluate the best model
+    if not os.path.exists(model_path):
+        print(f"Error: Model not found at {model_path}. Please run training first.")
+        return
 
-    env = DummyVecEnv([
-        lambda: WarehouseEnv(
-            grid_size=config["env"]["grid_size"],
-            num_items=config["env"]["num_items"],
-            max_steps=config["env"]["max_steps"]
-        )
-    ])
-    
+    print(f"Loading model from {model_path}...")
     model = DQN.load(model_path)
 
-    for ep in range(episodes):
-        obs, _ = env.reset()
-        done = False
-        total_reward = 0
+    # --- 2. Create Environment ---
+    print("Creating evaluation environment...")
+    eval_env = WarehouseEnv(
+        grid_size=env_params['grid_size'],
+        num_items=env_params['num_items'],
+        max_steps=env_params['max_steps'],
+        render_mode="rgb_array"
+    )
+    eval_env_wrapped = FlattenObservation(eval_env)
 
-        while not done:
-            action, _ = model.predict(obs, deterministic=True)
-            obs, reward, done, _, _ = env.step(action)
-            total_reward += reward
+    # --- 3. Run a Single Episode ---
+    frames = []
+    obs, _ = eval_env_wrapped.reset()
+    print("Starting evaluation episode...")
 
-        print(f"Episode {ep + 1}: Total Reward = {total_reward:.2f}")
+    for step in range(env_params['max_steps']):
+        frames.append(eval_env.render())
+        action, _ = model.predict(obs, deterministic=True)
+        obs, reward, terminated, truncated, info = eval_env_wrapped.step(action)
+        
+        if terminated or truncated:
+            print(f"Episode finished after {step + 1} steps.")
+            break
+    
+    eval_env_wrapped.close()
+    
+    # --- 4. Save the GIF ---
+    if frames:
+        print(f"Saving evaluation GIF to {paths['evaluation_gif']}...")
+        imageio.mimsave(paths['evaluation_gif'], frames, fps=10, loop=0)
+        print("Evaluation GIF saved successfully.")
+    else:
+        print("Warning: No frames were captured during evaluation.")
 
-
-if __name__ == "__main__":
-    evaluate_agent()
+if __name__ == '__main__':
+    evaluate()
